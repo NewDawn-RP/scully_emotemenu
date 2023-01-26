@@ -4,7 +4,7 @@ Config = {
     -- You can disable the emote binds option here.
     EnableEmoteBinds = true,
     -- Block players from using weapons while doing an emote.
-    EnableWeaponBlock = false,
+    EnableWeaponBlock = true,
     -- Set this to '' to disable the key.
     CancelEmoteKey = 'x', -- List of keys here: https://docs.fivem.net/docs/game-references/input-mapper-parameter-ids/keyboard/
     -- Set this to '' to disable the key.
@@ -34,17 +34,17 @@ Config = {
     -- Set this to '' to disable the key.
     PtfxKeybind = 'g', -- List of keys here: https://docs.fivem.net/docs/game-references/input-mapper-parameter-ids/keyboard/
     -- You can enable automated ptfx on emotes with the Auto flag here. 
-    EnableAutoPtfx = false,
+    EnableAutoPtfx = true,
     -- You can enable the NSFW emotes here.
-    EnableNSFWEmotes = false,
+    EnableNSFWEmotes = true,
     -- You can enable the gang emotes here.
-    EnableGangEmotes = false,
+    EnableGangEmotes = true,
     -- You can enable the social movement emotes here.
-    EnableSocialMovementEmotes = false,
+    EnableSocialMovementEmotes = true,
     -- You can enable the consumable emotes here.
-    EnableConsumableEmotes = false,
+    EnableConsumableEmotes = true,
     -- You can enable the synchronized emotes here.
-    EnableSynchronizedEmotes = false,
+    EnableSynchronizedEmotes = true,
     -- You can enable the animal emotes here.
     EnableAnimalEmotes = false
 }
