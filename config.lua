@@ -1,6 +1,8 @@
 Config = {
     -- You can disable the search option here.
     EnableSearch = true,
+    -- You can disable prop dumps here.
+    EnablePropDump = true,
     -- You can disable the emote binds option here.
     EnableEmoteBinds = true,
     -- Block players from using weapons while doing an emote.
@@ -46,5 +48,7 @@ Config = {
     -- You can enable the synchronized emotes here.
     EnableSynchronizedEmotes = true,
     -- You can enable the animal emotes here.
-    EnableAnimalEmotes = false
+    EnableAnimalEmotes = false,
+    -- You can enable radial menu usage here.
+    EnableRadialMenu = false
 }
