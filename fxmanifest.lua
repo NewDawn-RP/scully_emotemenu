@@ -2,12 +2,19 @@
 fx_version 'cerulean'
 
 game 'gta5'
-version '1.7.1'
+version '1.8.0'
 
 dependencies {
     '/server:5848',
     '/onesync',
     'ox_lib'
+}
+
+files {
+    'locales/*.lua',
+    'animations/*.lua',
+    'custom_emotes.lua',
+    'prop_dump.lua'
 }
 
 shared_scripts {
@@ -21,12 +28,6 @@ server_scripts {
 
 client_scripts {
     'client/*.lua'
-}
-
-files {
-    'animations/*.lua',
-    'custom_emotes.lua',
-    'prop_dump.lua'
 }
 
 data_file 'DLC_ITYP_REQUEST' 'bzzz_foodpack.ytyp'
@@ -47,6 +48,4 @@ data_file 'DLC_ITYP_REQUEST' 'ultra_ringcase.ytyp'
 data_file 'DLC_ITYP_REQUEST' 'bzzz_food_xmas22.ytyp'
 
 lua54 'yes'
-
-provide 'dpemotes'
 
