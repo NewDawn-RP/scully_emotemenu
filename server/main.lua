@@ -88,10 +88,16 @@ local function dumpPropsToFile()
     end
 end
 
-local function deleteProps(props)
+local function deleteProps(source, props)
     for i = 1, #props do
-        DeleteEntity(props[i])
+        local prop = props[i]
+
+        if DoesEntityExist(prop) then
+            DeleteEntity(prop)
+        end
     end
+
+    playerProps[source] = nil
 end
 
 AddEventHandler('playerDropped', function(reason)
@@ -99,9 +105,7 @@ AddEventHandler('playerDropped', function(reason)
     local props = playerProps[src]
 
     if props then
-        deleteProps(props)
-
-        playerProps[src] = nil
+        deleteProps(src, props)
     end
 end)
 
@@ -110,9 +114,7 @@ RegisterNetEvent('scully_emotemenu:deleteProps', function(otherPlayer)
     local props = playerProps[src]
 
     if props then
-        deleteProps(props)
-
-        playerProps[src] = nil
+        deleteProps(src, props)
     end
 
     if otherPlayer then
@@ -140,12 +142,15 @@ lib.callback.register('scully_emotemenu:spawnProps', function(source, props)
 
         if not timeout then
             local netObject = NetworkGetNetworkIdFromEntity(object)
+
             if not playerProps[source] then playerProps[source] = {} end
+
             if prop.hasPTFX then Player(source).state:set('ptfxPropNet', netObject, true) end
 
             local index = #returnList + 1
 
             playerProps[source][index] = object
+            
             returnList[index] = {
                 object = netObject, 
                 bone = prop.bone, 

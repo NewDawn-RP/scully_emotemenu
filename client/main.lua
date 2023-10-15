@@ -1,8 +1,8 @@
 local gameBuild, currentWalk, currentExpression = GetGameBuildNumber(), GetResourceKvpString('animations_walkstyle') or 'default', GetResourceKvpString('animations_expression') or 'default'
 local emoteBinds, isActionsLimited, isPlayingAnimation = json.decode(GetResourceKvpString('animations_binds')) or {}, false, false
-local isRagdoll, isCrouched, isPointing = false, false, false
-local lastEmote, lastVariant, ptfxCanHold, otherPlayer = nil, nil, false, nil
-local playerParticles, keybinds, registeredEmotes = {}, {}, {}
+local isRagdoll, isPointing, returnStance = false, false, false
+local lastEmote, lastVariant, ptfxCanHold, otherPlayer, clone = nil, nil, false, nil, nil
+local playerParticles, keybinds, registeredEmotes, cloneProps = {}, {}, {}, {}
 local lang = require('locales.' .. Config.Language)
 
 -- Menu Options
@@ -76,6 +76,36 @@ function toggleMenu()
 end
 exports('toggleMenu', toggleMenu)
 
+---Opens list of emotes
+---@param _type string
+function listEmotes(_type)
+    local emotes = AnimationList[_type]
+
+    if not emotes then emotes = AnimationList.Emotes end
+
+    local emoteCount, emoteTable = #emotes, {}
+
+    for i = 1, emoteCount do
+        local emote = emotes[i]
+
+        if emote and emote.Label and emote.Command then
+            emoteTable[#emoteTable + 1] = '- ' .. emote.Label .. ' - ' .. emote.Command
+        end
+    end
+
+    local content = table.concat(emoteTable, '\n')
+
+    lib.alertDialog({
+        header = lang.emote_list,
+        content = content,
+        centered = true,
+        size = 'lg',
+        overflow = true,
+        labels = {cancel = '', confirm = lang.close}
+    })
+end
+exports('listEmotes', listEmotes)
+
 ---Toggle player limitations
 ---@param limited boolean
 function setLimitation(limited)
@@ -127,6 +157,7 @@ function notify(_type, message)
         iconColor = _type == 'error' and '#D30000' or '#2ea4f7'
     })
 end
+exports('customNotifyFn', function(fn) if fn then notify = fn end end)
 
 ---Displays a text UI
 ---@param icon string
@@ -142,6 +173,7 @@ function showHelpAlert(icon, text)
         }
     })
 end
+exports('customHelpAlertFn', function(fn) if fn then showHelpAlert = fn end end)
 
 ---Register emotes to be used within external resources
 ---@param emote table
@@ -228,7 +260,13 @@ end
 ---@param label string
 ---@param icon string
 function addEmotesToRadial(_type, id, icon, cancel)
-    local options = {cancel}
+    local options = {{
+        label = lang.emote_list,
+        icon = 'list',
+        onSelect = function()
+            listEmotes(_type)
+        end
+    }, cancel}
 
     for i = 1, #AnimationList[_type] do
         local emote = AnimationList[_type][i]
@@ -355,10 +393,9 @@ function playEmote(data, variation)
         return 
     end
 
-    local isInVehicle = IsPedInAnyVehicle(cache.ped, true)
-    local duration, movementFlag = nil, isInVehicle and 51 or 0
+    local duration, movementFlag = nil, cache.vehicle and 51 or 0
 
-    if not Config.AllowedInVehicles and isInVehicle then
+    if not Config.AllowedInVehicles and cache.vehicle then
         notify('error', lang.no_animations_in_vehicle)
         return
     end
@@ -366,7 +403,7 @@ function playEmote(data, variation)
     TriggerServerEvent('scully_emotemenu:deleteProps')
 
     if data.Scenario then
-        if isInVehicle then
+        if cache.vehicle then
             notify('error', lang.no_scenarios_in_vehicle)
             return
         end
@@ -394,13 +431,25 @@ function playEmote(data, variation)
         return
     end
 
+    if data.NSFW and (type(Config.EnableNSFWEmotes) == 'string' and Config.EnableNSFWEmotes == 'limited') then
+        if not LocalPlayer.state.allowNSFWEmotes then 
+            notify('error', lang.nsfw_limited)
+            return 
+        end
+    end
+
     if data.Options then
         duration = data.Options.Duration
 
         if data.Options.Delay then Wait(data.Options.Delay) end
 
-        if not isInVehicle and data.Options.Flags then
-            if data.Options.Flags.Loop then movementFlag = 1 end
+        if not cache.vehicle and data.Options.Flags then
+            if data.Options.Flags.Loop then 
+                movementFlag = 1
+
+                lastEmote, lastVariant = data, variation
+            end
+
             if data.Options.Flags.Move then movementFlag = 51 end
             if data.Options.Flags.Stuck then movementFlag = 50 end
         end
@@ -426,7 +475,6 @@ function playEmote(data, variation)
     RemoveAnimDict(dictionaryName)
 
     isPlayingAnimation = true
-    lastEmote, lastVariant = data, variation
 
     if data.Options and data.Options.Props then
         local propCount = #data.Options.Props
@@ -478,8 +526,131 @@ function playEmote(data, variation)
 end
 exports('playEmote', playEmote)
 
+---Play an animation using a clone
+---@param data table
+function initCloneEmote(data)
+    if DoesEntityExist(clone) then return end
+
+    if cache.vehicle then
+        notify('error', lang.no_animations_in_vehicle)
+        return
+    end
+
+    local cloneModel = `mp_m_freemode_01`
+    local clonePos = GetOffsetFromEntityInWorldCoords(cache.ped, 0.0, 4.5, 0.0)
+    local cloneHeading = GetEntityHeading(cache.ped) + 180
+
+    lib.requestModel(cloneModel, 1000)
+
+    clone = CreatePed(4, cloneModel, clonePos.x, clonePos.y, clonePos.z, cloneHeading, false, false)
+
+    SetEntityAlpha(clone, 200)
+
+    Wait(200)
+
+    local hasAutomatedPtfx, dictionaryName, animationName = false, data.Dictionary, data.Animation
+
+    if (type(dictionaryName) == 'table') and (type(animationName) == 'table') then
+        local randomIndex = math.random(1, #animationName)
+
+        dictionaryName = dictionaryName[randomIndex]
+        animationName = animationName[randomIndex]
+    end
+
+    local isValid = lib.requestAnimDict(dictionaryName, 1000)
+
+    if not isValid then
+        notify('error', lang.not_valid_emote)
+        return
+    end
+
+    if data.Options then
+        duration = data.Options.Duration
+
+        if data.Options.Delay then Wait(data.Options.Delay) end
+
+        if not cache.vehicle and data.Options.Flags then
+            if data.Options.Flags.Loop then movementFlag = 1 end
+            if data.Options.Flags.Move then movementFlag = 51 end
+            if data.Options.Flags.Stuck then movementFlag = 50 end
+        end
+
+        if data.Options.Ptfx then
+            -- TO-DO
+        end
+    end
+
+    local cloneDuration = GetAnimDuration(dictionaryName, animationName)
+
+    TaskPlayAnim(clone, dictionaryName, animationName, 2.0, 2.0, duration or -1, movementFlag, 0, false, false, false)
+    RemoveAnimDict(dictionaryName)
+
+    isPlayingAnimation = true
+
+    if data.Options and data.Options.Props then
+        local propCount = #data.Options.Props
+
+        if propCount > 0 then
+            Wait(duration or 0)
+
+            local propList = {}
+
+            for i = 1, propCount do
+                local prop = data.Options.Props[i]
+                local variant = prop.Variant
+
+                if variation then
+                    if prop.Variations and prop.Variations[variation] then
+                        variant = prop.Variations[variation]
+                    end
+                end
+
+                propList[#propList + 1] = {
+                    hash = joaat(prop.Name), 
+                    bone = prop.Bone, 
+                    placement = prop.Placement
+                }
+            end
+
+            if #propList > 0 then
+                for i = 1, #propList do
+                    local prop = propList[i]
+                    
+                    lib.requestModel(prop.hash, 1000)
+                    
+                    local object = CreateObject(prop.hash, clonePos.x, clonePos.y, clonePos.z, false, false, false)
+
+                    SetEntityCollision(object, false, false)
+                    AttachEntityToEntity(object, clone, GetPedBoneIndex(clone, prop.bone), prop.placement[1].x, prop.placement[1].y, prop.placement[1].z, prop.placement[2].x, prop.placement[2].y, prop.placement[2].z, true, true, false, true, 1, true)
+
+                    cloneProps[#cloneProps + 1] = object
+                    
+                    SetModelAsNoLongerNeeded(prop.hash)
+                end
+            end
+        end
+    end
+
+    local endTimer = ((cloneDuration or 0) + 1) * 1000
+
+    if endTimer > 5000 then
+        endTimer = 5000
+    end
+
+    Wait(endTimer)
+
+    for i = 1, #cloneProps do
+        DeleteEntity(cloneProps[i])
+    end
+
+    cloneProps = {}
+
+    DeleteEntity(clone)
+end
+
 ---Cancel the animation you're currently playing
-function cancelEmote()
+---@param skipReset boolean 
+function cancelEmote(skipReset)
     if isPlayingAnimation then
         if IsPedUsingAnyScenario(cache.ped) then ClearPedTasksImmediately(cache.ped) end
         if LocalPlayer.state.ptfx then LocalPlayer.state:set('ptfx', false, true) end
@@ -490,6 +661,10 @@ function cancelEmote()
         TriggerServerEvent('scully_emotemenu:deleteProps', otherPlayer)
 
         isPlayingAnimation = false
+
+        if not skipReset then
+            lastEmote, lastVariant = nil, nil
+        end
 
         if otherPlayer then
             TriggerServerEvent('scully_emotemenu:cancelSynchronizedEmote', otherPlayer)
@@ -772,37 +947,60 @@ end
 
 local IsPedFalling = IsPedFalling
 local IsPedJumping = IsPedJumping
+local IsAimCamActive = IsAimCamActive
+local SetPedMaxMoveBlendRatio = SetPedMaxMoveBlendRatio
 local IsPedUsingActionMode = IsPedUsingActionMode
 local SetPedUsingActionMode = SetPedUsingActionMode
 local SetPedCanPlayAmbientAnims = SetPedCanPlayAmbientAnims
+local DisableFirstPersonCamThisFrame = DisableFirstPersonCamThisFrame
 
 ---Crouch loop
-function CrouchLoop()
+function crouchLoop()
     CreateThread(function()
-        while isCrouched do
+        while LocalPlayer.state.stance == 2 do
             Wait(0)
             
             if cache.vehicle then 
-                isCrouched = false
+                LocalPlayer.state:set('stance', 0, false)
                 break
             end
 
             if IsPedFalling(cache.ped) then 
-                isCrouched = false
+                LocalPlayer.state:set('stance', 0, false)
                 break
             end
 
             if IsPedJumping(cache.ped) then 
-                isCrouched = false
+                LocalPlayer.state:set('stance', 0, false)
                 break
             end
 
-            if IsPedUsingActionMode(cache.ped) == 1 then
+            if IsAimCamActive() then
+                SetPedMaxMoveBlendRatio(cache.ped, 0.15)
+            end
+
+            if IsPedUsingActionMode(cache.ped) then
                 SetPedUsingActionMode(cache.ped, false, -1, 'DEFAULT_ACTION')
             end
 
             SetPedCanPlayAmbientAnims(cache.ped, false)
+            DisableFirstPersonCamThisFrame()
         end
+    end)
+end
+
+-- Disable the stance controls
+function disableStanceControls()
+    lib.disableControls:Add({36, 26})
+
+    CreateThread(function()
+        while IsDisabledControlPressed(0, 36) or IsDisabledControlPressed(0, 26) do
+            Wait(0)
+
+            lib.disableControls()
+        end
+
+        lib.disableControls:Remove({36, 26})
     end)
 end
 
@@ -1027,6 +1225,11 @@ lib.registerMenu({
         return
     end
 
+    if IsControlPressed(0, 38) and Config.EnableEmotePreview then
+        initCloneEmote(emote)
+        return
+    end
+
     playEmote(emote)
 end)
 
@@ -1053,6 +1256,12 @@ for i = 1, #Config.EmotePlayCommands do
 
         if emoteName == 'c' then
             cancelEmote()
+
+            return
+        end
+
+        if emoteName == 'l' then
+            listEmotes('Emotes')
 
             return
         end
@@ -1094,13 +1303,21 @@ for i = 1, #Config.WalkSetCommands do
             return
         end
 
-        if args[1]:lower() == 'c' then
+        local walkName = args[1]:lower()
+
+        if walkName == 'c' then
             resetWalk()
 
             return
         end
 
-        local _type, emote = getEmoteByCommand(args[1])
+        if walkName == 'l' then
+            listEmotes('Walks')
+
+            return
+        end
+
+        local _type, emote = getEmoteByCommand(walkName)
 
         if not _type or (_type ~= 'Walks') then
             notify('error', lang.not_valid_walk)
@@ -1166,8 +1383,16 @@ if Config.HandsUpKey ~= '' then
         onPressed = function(key)
             if isActionsLimited then return end
 
+            local onBike = false
+
+            if cache.vehicle then
+                local model = GetEntityModel(cache.vehicle)
+
+                onBike = IsThisModelABike(model)
+            end
+
             lib.requestAnimDict('random@mugging3', 1000)
-            TaskPlayAnim(cache.ped, 'random@mugging3', 'handsup_standing_base', 8.0, 8.0, -1, 50, 0, false, false, false)
+            TaskPlayAnim(cache.ped, 'random@mugging3', 'handsup_standing_base', 8.0, 8.0, -1, 50, 0, false, onBike and 4127 or false, false)
         end,
         onReleased = function(key)
             ClearPedTasks(cache.ped)
@@ -1175,36 +1400,33 @@ if Config.HandsUpKey ~= '' then
     })
 end
 
-if Config.CrouchKey ~= '' then
-    keybinds.Crouch = lib.addKeybind({
-        name = 'crouch',
-        description = lang.crouch,
-        defaultKey = Config.CrouchKey,
+if Config.StanceKey ~= '' then
+    LocalPlayer.state:set('stance', 0, false)
+
+    keybinds.Stance = lib.addKeybind({
+        name = 'stance',
+        description = lang.stance,
+        defaultKey = Config.StanceKey,
         onPressed = function(key)
-            DisableControlAction(0, 36, true)
-            DisableControlAction(0, 26, true)
-            
             if isActionsLimited or cache.vehicle then return end
 
-            isCrouched = not isCrouched
+            DisableControlAction(0, 36, true)
+            DisableControlAction(0, 26, true)
+            disableStanceControls()
 
-            if isCrouched then
-                lib.requestAnimSet('move_ped_crouched', 1000)
-                SetPedMovementClipset(cache.ped, 'move_ped_crouched', 1.0)
-                SetPedWeaponMovementClipset(cache.ped, 'move_ped_crouched', 1.0)
-                SetPedStrafeClipset(cache.ped, 'move_ped_crouched_strafing', 1.0)
-                CrouchLoop()
+            local stanceLevel = LocalPlayer.state.stance
+
+            if returnStance then
+                stanceLevel -= 1
+
+                if stanceLevel == 0 then returnStance = false end
             else
-                if currentWalk == 'default' then
-                    ResetPedMovementClipset(cache.ped, 1.0)
-                else
-                    lib.requestAnimSet(currentWalk, 1000)
-                    SetPedMovementClipset(cache.ped, currentWalk, 1.0)
-                end
+                stanceLevel += 1
 
-                ResetPedWeaponMovementClipset(cache.ped)
-                ResetPedStrafeClipset(cache.ped)
+                if stanceLevel == 2 then returnStance = true end
             end
+
+            LocalPlayer.state:set('stance', stanceLevel, false)
         end
     })
 end
@@ -1351,6 +1573,30 @@ AddStateBagChangeHandler('ptfx', nil, function(bagName, key, value, _unused, rep
     end
 end)
 
+AddStateBagChangeHandler('stance', nil, function(bagName, key, value, _unused, replicated)
+    if value == 0 then -- Regular
+        SetPedStealthMovement(cache.ped, false, 0)
+    elseif value == 1 then -- Stealth
+        if currentWalk == 'default' then
+            ResetPedMovementClipset(cache.ped, 1.0)
+        else
+            lib.requestAnimSet(currentWalk, 1000)
+            SetPedMovementClipset(cache.ped, currentWalk, 1.0)
+        end
+
+        ResetPedWeaponMovementClipset(cache.ped)
+        ResetPedStrafeClipset(cache.ped)
+        SetPedStealthMovement(cache.ped, true, 0)
+    elseif value == 2 then -- Crouched
+        lib.requestAnimSet('move_ped_crouched', 1000)
+        SetPedStealthMovement(cache.ped, false, 0)
+        SetPedMovementClipset(cache.ped, 'move_ped_crouched', 1.0)
+        SetPedWeaponMovementClipset(cache.ped, 'move_ped_crouched', 1.0)
+        SetPedStrafeClipset(cache.ped, 'move_ped_crouched_strafing', 1.0)
+        crouchLoop()
+    end
+end)
+
 -- Events
 RegisterNetEvent('scully_emotemenu:cancelEmote', function()
     cancelEmote()
@@ -1394,6 +1640,10 @@ end)
 
 RegisterNetEvent('scully_emotemenu:toggleLimitation', function(_state)
     setLimitation(_state)
+end)
+
+RegisterNetEvent('scully_emotemenu:listEmotes', function(_type)
+    listEmotes(_type)
 end)
 
 RegisterNetEvent('scully_emotemenu:toggleMenu', function()
@@ -1548,7 +1798,7 @@ AddEventHandler('CEventOpenDoor', function()
     openingDoor = false
 
     if lastEmote then
-        cancelEmote()
+        cancelEmote(true)
         Wait(10)
         playEmote(lastEmote, lastVariant)
     end
@@ -1563,8 +1813,6 @@ AddEventHandler('CEventPlayerCollisionWithPed', function()
         hitTimeout = 500
         return
     end
-    
-    cancelEmote()
 
     hitTimeout, hittingPed = 500, true
 
@@ -1577,6 +1825,8 @@ AddEventHandler('CEventPlayerCollisionWithPed', function()
     if lastEmote then
         hitTimeout, hittingPed = 500, false
 
+        cancelEmote(true)
+        Wait(10)
         playEmote(lastEmote, lastVariant)
     end
 end)

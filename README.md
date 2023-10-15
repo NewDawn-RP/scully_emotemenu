@@ -59,6 +59,10 @@ For support join my discord here: https://discord.gg/scully
 
 - Prop extractor for anticheat systems
 
+- Emote preview system by holding `E` while selecting an emote
+
+- Compatibility with QBCore events
+
 # Exports
 
 | Export Name | Parameter(s) | Type | Description |
@@ -80,6 +84,9 @@ For support join my discord here: https://discord.gg/scully
 | [cancelEmote](docs/exports/client/cancelEmote.md) | None | Client | Stop playing an animation |
 | [isLimited](docs/exports/client/isLimited.md) | None | Client | Check if the player is currently limited |
 | [setLimitation](docs/exports/client/setLimitation.md) | Boolean (Limited) | Client | Toggle player limitations |
+| [listEmotes](docs/exports/client/listEmotes.md) | String (Emote Type) | Client | List emotes from any category |
+| [customNotifyFn](docs/exports/client/customNotifyFn.md) | Function (Emote Notification) | Client | Set a custom notification function |
+| [customHelpAlertFn](docs/exports/client/customHelpAlertFn.md) | Function (Emote Help Alert) | Client | Set a custom help alert function |
 
 # Events
 
@@ -97,6 +104,7 @@ For support join my discord here: https://discord.gg/scully
 | [scully_emotemenu:playByCommand](docs/exports/client/playByCommand.md) | String (Emote Command), Number (Variant) | Client | Play an animation using the command |
 | [scully_emotemenu:cancelAnimation](docs/exports/client/cancelAnimation.md) | None | Client | Stop playing an animation |
 | [scully_emotemenu:toggleLimitation](docs/exports/client/toggleLimitation.md) | Boolean (Limited) | Client | Toggle player limitations |
+| [scully_emotemenu:listEmotes](docs/exports/client/listEmotes.md) | String (Emote Type) | Client | List emotes from any category |
 
 # Keybinds
 
@@ -121,7 +129,7 @@ We've addressed concerns about anticheat scripts causing unintended bans or kick
 **Key:** `NSFW = true`
 <br>
 
-**Description:** NSFW animations are any animation that wouldn't be considered safe for anyone under the age of 18 to see, if you don't run an 18+ community I suggest keeping the `EnableNSFWEmotes` config option as false which will disable all animations with this added.
+**Description:** NSFW animations are any animation that wouldn't be considered safe for anyone under the age of 18 to see, if you don't run an 18+ community I suggest keeping the `EnableNSFWEmotes` config option as false which will disable all animations with this added. You can also set `EnableNSFWEmotes` to `'limited'` which will make it so a state bag needs to be set so NSFW animations can be used. Info on the export can be found [here](docs/statebags/allowNSFWEmotes.md) and I would personally suggest making it so the animations can only be used when inside a house or apartment.
 </details>
 
 <details>
@@ -227,3 +235,5 @@ All custom animations were added with permission from the creators. Credit to th
 - [Pupppy](https://discord.gg/3fUwtQW54b)
 
 - [QueenSisters](https://www.gta5-mods.com/users/Queens%20Sister)
+
+- [Crunchycat](https://www.gta5-mods.com/users/crunchycat)
