@@ -2,21 +2,21 @@ local playerProps = {}
 local custom = require('custom_emotes')
 
 AnimationList = {
-    Walks = require('animations.walks'),
-    Scenarios = require('animations.scenarios'),
-    Expressions = require('animations.expressions'),
-    Emotes = require('animations.emotes'),
-    PropEmotes = require('animations.prop_emotes'),
-    ConsumableEmotes = require('animations.consumable_emotes'),
-    DanceEmotes = require('animations.dance_emotes'),
-    SynchronizedEmotes = require('animations.synchronized_emotes'),
-    AnimalEmotes = require('animations.animal_emotes')
+    Walks = require('data.animations.walks'),
+    Scenarios = require('data.animations.scenarios'),
+    Expressions = require('data.animations.expressions'),
+    Emotes = require('data.animations.emotes'),
+    PropEmotes = require('data.animations.prop_emotes'),
+    ConsumableEmotes = require('data.animations.consumable_emotes'),
+    DanceEmotes = require('data.animations.dance_emotes'),
+    SynchronizedEmotes = require('data.animations.synchronized_emotes'),
+    AnimalEmotes = require('data.animations.animal_emotes')
 }
 
 -- Import customs animations
 for _type, emoteList in pairs(custom) do
     for i = 1, #emoteList do
-        AnimationList[_type][#AnimationList[_type] + 1] = emoteList[i] 
+        AnimationList[_type][#AnimationList[_type] + 1] = emoteList[i]
     end
 end
 
@@ -30,14 +30,14 @@ local function CheckMenuVersion()
     PerformHttpRequest('https://raw.githubusercontent.com/scullyy/scully_emotemenu/master/version.txt', function(err, text, headers)
         local currentVersion = GetResourceMetadata(GetCurrentResourceName(), 'version')
 
-        if not text then 
+        if not text then
             emoteMenuPrint('error', 'Currently unable to run a version check.')
-            return 
+            return
         end
 
         emoteMenuPrint('success', ('Current Version: %s'):format(currentVersion))
         emoteMenuPrint('success', ('Latest Version: %s'):format(text))
-        
+
         if text == currentVersion then
             emoteMenuPrint('success', 'You are running the latest version.')
         else
@@ -48,20 +48,20 @@ end
 
 local function dumpPropsToFile()
     if not Config.EnablePropDump then return end
-    
+
     local propDump = {}
-    
+
     for _type, emoteList in pairs(AnimationList) do
         for i = 1, #emoteList do
             local emote = emoteList[i]
-    
+
             if emote.Options and emote.Options.Props then
                 local propCount = #emote.Options.Props
-        
+
                 if propCount > 0 then
                     for k = 1, propCount do
                         local prop = emote.Options.Props[k]
-                        
+
                         propDump[prop.Name] = true
                     end
                 end
@@ -126,39 +126,45 @@ lib.callback.register('scully_emotemenu:spawnProps', function(source, props)
     local ped = GetPlayerPed(source)
     local coords = GetEntityCoords(ped)
     local returnList = {}
-    
+    local returnAmt = 0
+
+    local playerProp = playerProps[source] or {}
+
+    if next(playerProp) then
+        deleteProps(source, playerProp)
+        table.wipe(playerProp)
+    end
+
     for i = 1, #props do
         local prop = props[i]
-        local timeout = false
         local object = CreateObject(prop.hash, coords.x, coords.y, coords.z, true)
 
-        SetTimeout(2000, function()
-            timeout = true
-        end)
+        local entityExsist = lib.waitFor(function()
+            if DoesEntityExist(object) then
+                return true
+            end
+        end, ('Failed to spawn prop %s'):format(prop.hash), 2000)
 
-        while not DoesEntityExist(object) and not timeout do
-            Wait(0)
-        end
-
-        if not timeout then
+        if entityExsist then
             local netObject = NetworkGetNetworkIdFromEntity(object)
-
-            if not playerProps[source] then playerProps[source] = {} end
 
             if prop.hasPTFX then Player(source).state:set('ptfxPropNet', netObject, true) end
 
-            local index = #returnList + 1
+            SetEntityIgnoreRequestControlFilter(object, true)
 
-            playerProps[source][index] = object
-            
-            returnList[index] = {
-                object = netObject, 
-                bone = prop.bone, 
-                placement = prop.placement, 
+            returnAmt += 1
+            playerProp[returnAmt] = object
+
+            returnList[returnAmt] = {
+                object = netObject,
+                bone = prop.bone,
+                placement = prop.placement,
                 variant = prop.variant
             }
         end
     end
+
+    playerProps[source] = playerProp
 
     return returnList
 end)
